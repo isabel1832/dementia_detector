@@ -1,92 +1,136 @@
-'use client';
-
-import { useState } from 'react';
+import Link from "next/link";
 
 export default function Home() {
-  const [topic, setTopic] = useState('');
-  const [joke, setJoke] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!topic.trim()) return;
-
-    setLoading(true);
-    setJoke('');
-
-    try {
-      const res = await fetch('/api/groq', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ topic }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setJoke(data.joke);
-      } else {
-        setJoke(data.error || 'Something went wrong');
-      }
-    } catch (err) {
-      setJoke('Failed to connect to the server');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <main style={{ maxWidth: '500px', margin: '60px auto', padding: '0 20px', fontFamily: 'sans-serif' }}>
-      <h1>AI Joke Generator</h1>
-      <p style={{ color: '#666' }}>Enter a topic to generate a quick joke using Groq.</p>
+    <main className="min-h-screen bg-[#F7F5EF] text-[#24302A]">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8 sm:px-10">
+        {/* Header */}
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#DCE9DF] text-2xl">
+              🧠
+            </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-        <input
-          type="text"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder="e.g., Coding, Coffee, Cats"
-          style={{
-            flex: 1,
-            padding: '10px 14px',
-            fontSize: '16px',
-            border: '1px solid #ccc',
-            borderRadius: '6px',
-          }}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: '10px 18px',
-            fontSize: '16px',
-            backgroundColor: '#0070f3',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? 'Generating...' : 'Ask Groq'}
-        </button>
-      </form>
+            <span className="text-xl font-semibold tracking-tight">
+              Memory & Puzzle
+            </span>
+          </div>
 
-      {joke && (
-        <div
-          style={{
-            marginTop: '24px',
-            padding: '16px',
-            backgroundColor: '#f5f5f5',
-            borderRadius: '8px',
-            borderLeft: '4px solid #0070f3',
-          }}
-        >
-          <p style={{ margin: 0, fontSize: '18px', lineHeight: '1.5' }}>{joke}</p>
-        </div>
-      )}
+          <Link
+            href="/login"
+            className="rounded-xl px-5 py-3 text-base font-semibold text-[#315C43] hover:bg-[#E8EFE9]"
+          >
+            Sign in
+          </Link>
+        </header>
+
+        {/* Main content */}
+        <section className="flex flex-1 items-center py-16">
+          <div className="grid w-full items-center gap-12 md:grid-cols-2">
+            {/* Text */}
+            <div className="max-w-xl">
+              <p className="mb-5 text-lg font-semibold text-[#557461]">
+                Welcome
+              </p>
+
+              <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                A simple way to keep your mind active.
+              </h1>
+
+              <p className="mt-6 max-w-lg text-xl leading-9 text-[#56615B]">
+                Enjoy short, engaging memory games and puzzles designed to be
+                simple, encouraging, and easy to use.
+              </p>
+
+              <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+                <Link
+                  href="/login"
+                  className="flex min-h-16 items-center justify-center rounded-2xl bg-[#315C43] px-8 text-lg font-bold text-white shadow-sm transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
+                >
+                  Get started
+                </Link>
+
+                <Link
+                  href="/login"
+                  className="flex min-h-16 items-center justify-center rounded-2xl border-2 border-[#B9C8BD] bg-white px-8 text-lg font-bold text-[#315C43] transition hover:bg-[#F1F5F2] focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
+                >
+                  I have an access code
+                </Link>
+              </div>
+
+              <p className="mt-6 text-sm leading-6 text-[#68736D]">
+                You can use the app on your own or with help from a family
+                member or caregiver.
+              </p>
+            </div>
+
+            {/* Illustration / welcome card */}
+            <div className="flex justify-center">
+              <div className="w-full max-w-md rounded-[2rem] border border-[#DCE3DD] bg-white p-6 shadow-sm">
+                <div className="rounded-3xl bg-[#EDF4EE] p-8">
+                  <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-[#DCE9DF] text-5xl">
+                    🧩
+                  </div>
+
+                  <div className="mt-8 text-center">
+                    <h2 className="text-2xl font-bold">
+                      Today&apos;s activities
+                    </h2>
+
+                    <p className="mt-2 text-base leading-7 text-[#68736D]">
+                      Short activities you can complete at your own pace.
+                    </p>
+                  </div>
+
+                  <div className="mt-7 space-y-3">
+                    <div className="flex items-center justify-between rounded-2xl bg-white px-5 py-4">
+                      <div>
+                        <p className="font-semibold">Memory Match</p>
+                        <p className="text-sm text-[#68736D]">About 5 min</p>
+                      </div>
+
+                      <span className="text-xl">🧠</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl bg-white px-5 py-4">
+                      <div>
+                        <p className="font-semibold">Picture Recall</p>
+                        <p className="text-sm text-[#68736D]">About 5 min</p>
+                      </div>
+
+                      <span className="text-xl">🖼️</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-2xl bg-white px-5 py-4">
+                      <div>
+                        <p className="font-semibold">Sequence</p>
+                        <p className="text-sm text-[#68736D]">About 5 min</p>
+                      </div>
+
+                      <span className="text-xl">🔢</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="flex flex-col gap-3 border-t border-[#DCE3DD] pt-6 text-sm text-[#68736D] sm:flex-row sm:items-center sm:justify-between">
+          <p>Simple. Encouraging. Accessible.</p>
+
+          <div className="flex gap-5">
+            <Link href="/help" className="hover:text-[#315C43]">
+              Help
+            </Link>
+
+            <Link href="/privacy" className="hover:text-[#315C43]">
+              Privacy
+            </Link>
+          </div>
+        </footer>
+      </div>
     </main>
   );
 }
