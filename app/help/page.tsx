@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useAccessibility } from "@/app/context/AccessibilityContext";
 
 export default function HelpPage() {
+  const { speak } = useAccessibility();
+
   return (
     <main className="min-h-screen bg-[#F7F5EF] text-[#24302A]">
       <div className="mx-auto min-h-screen max-w-5xl px-6 py-8 sm:px-10">
@@ -53,6 +58,11 @@ export default function HelpPage() {
             {/* Replay Instructions */}
             <button
               type="button"
+              onClick={() =>
+                speak(
+                  "Here are the instructions. Choose an activity from your home screen. In Memory Match, turn over two cards at a time to find matching pairs. In Picture Recall, remember the pictures shown to you. In Sequence, tap the shapes in the same order. Take all the time you need and enjoy yourself."
+                )
+              }
               className="flex min-h-28 items-center gap-5 rounded-[2rem] border-2 border-[#DCE3DD] bg-white p-6 text-left shadow-sm transition hover:bg-[#F1F5F2] focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
             >
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#EDF4EE] text-2xl">

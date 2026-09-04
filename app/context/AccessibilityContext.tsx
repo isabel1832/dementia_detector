@@ -46,6 +46,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
   const [isClient, setIsClient] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const pendingSpeechRef = useRef<string | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
   // Helper to get or lazily initialize the singleton AudioContext
   const getAudioContext = useCallback(() => {
@@ -64,25 +66,20 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     return audioCtxRef.current;
   }, []);
 
-  // Global listener to unlock audio & speech on the first user interaction
+  // Pre-load available speech synthesis voices
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-    const unlockAudio = () => {
-      getAudioContext();
-      if ("speechSynthesis" in window && window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length > 0) {
+        voicesRef.current = v;
       }
     };
 
-    window.addEventListener("pointerdown", unlockAudio, { once: true });
-    window.addEventListener("keydown", unlockAudio, { once: true });
-
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-    };
-  }, [getAudioContext]);
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
   // Load from localStorage on client mount
   useEffect(() => {
@@ -130,6 +127,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
       utteranceRef.current = null;
+      pendingSpeechRef.current = null;
     }
   }, []);
 
@@ -138,41 +136,106 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       if (!settings.voiceInstructions) return;
 
-      stopSpeaking();
-
-      // Ensure any paused synthesis state is unpaused
+      // Unpause if stuck
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      // Retain reference on ref to prevent browser garbage collection cutting off audio
-      utteranceRef.current = utterance;
-      utterance.lang = "en-US";
-
-      // Rate adjustment
-      if (settings.voiceSpeed === "slow") {
-        utterance.rate = 0.8;
-      } else if (settings.voiceSpeed === "fast") {
-        utterance.rate = 1.2;
-      } else {
-        utterance.rate = 1.0;
+      // Cancel only if currently speaking to avoid wiping out the queue prematurely
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
       }
 
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        utteranceRef.current = null;
-      };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        utteranceRef.current = null;
-      };
+      // In Chrome/macOS, speechSynthesis.cancel() is asynchronous.
+      // Calling speak() synchronously right after cancel() causes the new utterance to be canceled immediately!
+      // A small 60ms delay ensures Chrome resets its speech dispatcher.
+      setTimeout(() => {
+        try {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utteranceRef.current = utterance;
+          utterance.lang = "en-US";
+          utterance.volume = 1.0;
 
-      window.speechSynthesis.speak(utterance);
+          // Pick the best available English voice
+          const voices =
+            voicesRef.current.length > 0 ? voicesRef.current : window.speechSynthesis.getVoices();
+          if (voices.length > 0) {
+            const chosen =
+              voices.find(
+                (v) =>
+                  v.lang.startsWith("en") &&
+                  (v.name.includes("Samantha") || v.name.includes("Google") || v.default)
+              ) ||
+              voices.find((v) => v.lang.startsWith("en")) ||
+              voices[0];
+            if (chosen) {
+              utterance.voice = chosen;
+            }
+          }
+
+          if (settings.voiceSpeed === "slow") {
+            utterance.rate = 0.8;
+          } else if (settings.voiceSpeed === "fast") {
+            utterance.rate = 1.2;
+          } else {
+            utterance.rate = 1.0;
+          }
+
+          utterance.onstart = () => setIsSpeaking(true);
+          utterance.onend = () => {
+            setIsSpeaking(false);
+            utteranceRef.current = null;
+            pendingSpeechRef.current = null;
+          };
+          utterance.onerror = (e) => {
+            setIsSpeaking(false);
+            utteranceRef.current = null;
+            // If blocked by browser autoplay policy before user gesture:
+            if (e.error === "not-allowed") {
+              pendingSpeechRef.current = text;
+            }
+          };
+
+          window.speechSynthesis.speak(utterance);
+
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        } catch (err) {
+          console.warn("Speech synthesis error:", err);
+        }
+      }, 60);
     },
-    [settings.voiceInstructions, settings.voiceSpeed, stopSpeaking]
+    [settings.voiceInstructions, settings.voiceSpeed]
   );
+
+  // Global listener to unlock audio & speech on user interaction
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const unlockAudio = () => {
+      getAudioContext();
+      if ("speechSynthesis" in window) {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        // If an instruction was deferred because of browser autoplay policy, speak it now
+        if (pendingSpeechRef.current) {
+          const textToSpeak = pendingSpeechRef.current;
+          pendingSpeechRef.current = null;
+          speak(textToSpeak);
+        }
+      }
+    };
+
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [getAudioContext, speak]);
 
   // Gentle audio tones using Web Audio API (calm, non-punitive, warm chimes)
   const playSound = useCallback(
