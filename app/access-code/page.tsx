@@ -28,16 +28,6 @@ export default function AccessCodePage() {
         return;
       }
 
-      // Persist active player session
-      try {
-        localStorage.setItem("dementia_auth_user", JSON.stringify(data.user));
-        localStorage.setItem("active_player_id", data.user.playerId || data.user.id);
-        localStorage.setItem("active_player_name", data.user.name || "");
-        localStorage.setItem("active_player_access_code", data.user.accessCode || accessCode);
-      } catch {
-        // ignore
-      }
-
       router.push("/player");
     } catch {
       setErrorMsg("Unable to connect. Please check your connection and try again.");

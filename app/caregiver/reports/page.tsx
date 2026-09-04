@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CaregiverNavigation from "@/app/components/CaregiverNavigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface GameStat {
   gameType: string;
@@ -31,6 +32,7 @@ interface Analytics {
 }
 
 export default function CaregiverReportsPage() {
+  useRequireAuth(["caregiver", "professional"]);
   const [players, setPlayers] = useState<Array<{ id: string; first_name: string; last_name: string | null }>>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -38,9 +40,7 @@ export default function CaregiverReportsPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const activeCaregiverId = localStorage.getItem("active_caregiver_id");
-        const url = activeCaregiverId ? `/api/caregiver/players?caregiverId=${activeCaregiverId}` : "/api/caregiver/players";
-        const res = await fetch(url);
+        const res = await fetch("/api/caregiver/players");
         if (res.ok) {
           const data = await res.json();
           if (data.players?.length) {
