@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 
 export type TextSize = "standard" | "large" | "extraLarge";
 export type ContrastMode = "standard" | "high";
@@ -44,6 +44,45 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
   const [settings, setSettings] = useState<AccessibilitySettings>(DEFAULT_SETTINGS);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Helper to get or lazily initialize the singleton AudioContext
+  const getAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!audioCtxRef.current) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        audioCtxRef.current = new AudioCtx();
+      }
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
+
+  // Global listener to unlock audio & speech on the first user interaction
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const unlockAudio = () => {
+      getAudioContext();
+      if ("speechSynthesis" in window && window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    };
+
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [getAudioContext]);
 
   // Load from localStorage on client mount
   useEffect(() => {
@@ -90,6 +129,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      utteranceRef.current = null;
     }
   }, []);
 
@@ -100,7 +140,14 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
 
       stopSpeaking();
 
+      // Ensure any paused synthesis state is unpaused
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+
       const utterance = new SpeechSynthesisUtterance(text);
+      // Retain reference on ref to prevent browser garbage collection cutting off audio
+      utteranceRef.current = utterance;
       utterance.lang = "en-US";
 
       // Rate adjustment
@@ -113,8 +160,14 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       }
 
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        utteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        utteranceRef.current = null;
+      };
 
       window.speechSynthesis.speak(utterance);
     },
@@ -128,9 +181,12 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       if (typeof window === "undefined") return;
 
       try {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
+        }
 
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -179,7 +235,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         // audio context could be blocked by browser policy until user interaction
       }
     },
-    [settings.soundEffects]
+    [settings.soundEffects, getAudioContext]
   );
 
   return (
