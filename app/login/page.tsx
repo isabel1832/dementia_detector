@@ -29,19 +29,6 @@ export default function LoginPage() {
         return;
       }
 
-      // Persist auth state in browser
-      try {
-        localStorage.setItem("dementia_auth_user", JSON.stringify(data.user));
-        if (data.user.role === "caregiver" || data.user.role === "professional") {
-          localStorage.setItem("active_caregiver_id", data.user.id);
-        } else {
-          localStorage.setItem("active_player_id", data.user.playerId || data.user.id);
-          localStorage.setItem("active_player_name", data.user.name || "");
-        }
-      } catch {
-        // ignore
-      }
-
       // Route according to user role
       if (data.user.role === "caregiver") {
         router.push("/caregiver/dashboard");
@@ -152,13 +139,6 @@ export default function LoginPage() {
                     placeholder="Enter your password"
                     className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-lg outline-none transition placeholder:text-[#8A938E] focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
                   />
-                </div>
-
-                {/* Demo quick logins helper */}
-                <div className="rounded-xl bg-[#F7F5EF] p-3 text-xs text-[#68736D] space-y-1">
-                  <p className="font-bold">Demo Accounts:</p>
-                  <p>Caregiver: <span className="font-mono text-[#315C43]">caregiver@example.com</span> / password123</p>
-                  <p>Clinician: <span className="font-mono text-[#315C43]">doctor@example.com</span> / password123</p>
                 </div>
 
                 {/* Sign in button */}

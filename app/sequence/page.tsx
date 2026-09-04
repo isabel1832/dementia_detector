@@ -8,6 +8,7 @@ import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import GameHeader from "@/app/components/GameHeader";
 import { PauseModal, ExitConfirmModal, SkipModal } from "@/app/components/GameModals";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -25,6 +26,7 @@ const DIFFICULTY_CONFIG: Record<Difficulty, { length: number }> = {
 };
 
 export default function SequencePage() {
+  useRequireAuth(["player"]);
   const router = useRouter();
   const { speak, playSound } = useAccessibility();
 
@@ -154,39 +156,23 @@ export default function SequencePage() {
       setPhase("complete");
       speak("Great job! You reproduced the complete sequence.");
 
-      try {
-        const accuracy = Math.round((sequence.length / (sequence.length + attempts)) * 100);
-        const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
-        history.push({
-          id: Date.now().toString(),
+      // Record the completed session so it shows up in the player's
+      // progress and the caregiver's dashboard.
+      fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           gameType: "SEQUENCE",
           difficulty,
           durationSeconds: seconds,
           attempts: attempts + 1,
+          accuracy: Math.max(0, 100 - attempts * 15),
           status: "COMPLETED",
-          createdAt: new Date().toISOString(),
-        });
-        localStorage.setItem("dementia_sessions", JSON.stringify(history));
-
-        // Persist to backend / Supabase
-        const activePlayerId = localStorage.getItem("active_player_id") || undefined;
-        fetch("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            playerId: activePlayerId,
-            gameType: "SEQUENCE",
-            difficulty,
-            durationSeconds: seconds,
-            score: Math.max(0, 100 - attempts * 5),
-            accuracy,
-            attempts: attempts + 1,
-            status: "COMPLETED",
-          }),
-        }).catch((err) => console.warn("Session save warning:", err));
-      } catch {
-        // ignore
-      }
+        }),
+      }).catch(() => {
+        // Non-fatal: the player still sees their completion screen even if
+        // this request fails (e.g. offline).
+      });
     }
   }
 

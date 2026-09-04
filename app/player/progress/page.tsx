@@ -5,6 +5,7 @@ import Link from "next/link";
 import PlayerNavigation from "@/app/components/PlayerNavigation";
 import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface SessionItem {
   id: string;
@@ -16,6 +17,7 @@ interface SessionItem {
 }
 
 export default function PlayerProgressPage() {
+  useRequireAuth(["player"]);
   const { speak } = useAccessibility();
   const [totalCompleted, setTotalCompleted] = useState<number>(0);
   const [thisWeekCount, setThisWeekCount] = useState<number>(0);
@@ -25,9 +27,7 @@ export default function PlayerProgressPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const activePlayerId = localStorage.getItem("active_player_id");
-        const url = activePlayerId ? `/api/sessions?playerId=${activePlayerId}` : "/api/sessions";
-        const res = await fetch(url);
+        const res = await fetch("/api/sessions");
         if (res.ok) {
           const data = await res.json();
           if (data.analytics) {

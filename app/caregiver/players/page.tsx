@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CaregiverNavigation from "@/app/components/CaregiverNavigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface Player {
   id: string;
@@ -14,6 +15,7 @@ interface Player {
 }
 
 export default function CaregiverPlayersPage() {
+  useRequireAuth(["caregiver"]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [accessCodeInput, setAccessCodeInput] = useState("");
   const [relationshipInput, setRelationshipInput] = useState("Family Member");
@@ -27,9 +29,7 @@ export default function CaregiverPlayersPage() {
 
   async function loadPlayers() {
     try {
-      const activeCaregiverId = localStorage.getItem("active_caregiver_id");
-      const url = activeCaregiverId ? `/api/caregiver/players?caregiverId=${activeCaregiverId}` : "/api/caregiver/players";
-      const res = await fetch(url);
+      const res = await fetch("/api/caregiver/players");
       if (res.ok) {
         const data = await res.json();
         setPlayers(data.players || []);
@@ -49,12 +49,10 @@ export default function CaregiverPlayersPage() {
     setIsLoading(true);
 
     try {
-      const activeCaregiverId = localStorage.getItem("active_caregiver_id") || undefined;
       const res = await fetch("/api/caregiver/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          caregiverId: activeCaregiverId,
           accessCode: accessCodeInput,
           relationship: relationshipInput,
         }),
@@ -82,13 +80,11 @@ export default function CaregiverPlayersPage() {
     setIsLoading(true);
 
     try {
-      const activeCaregiverId = localStorage.getItem("active_caregiver_id") || undefined;
       const res = await fetch("/api/caregiver/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create",
-          caregiverId: activeCaregiverId,
           firstName: newFirstName,
           lastName: newLastName,
           relationship: newRelationship,

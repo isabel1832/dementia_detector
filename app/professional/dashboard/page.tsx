@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface PlayerSummary {
   id: string;
@@ -13,12 +14,29 @@ interface PlayerSummary {
 }
 
 export default function ProfessionalDashboardPage() {
+  useRequireAuth(["professional"]);
   const router = useRouter();
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientStats, setPatientStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserName, setCurrentUserName] = useState("");
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUserName(data.user?.name || "");
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     async function loadPatients() {
@@ -81,10 +99,13 @@ export default function ProfessionalDashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-sm font-semibold text-[#68736D]">Dr. Evelyn Reed (Clinician)</span>
+            <span className="text-sm font-semibold text-[#68736D]">{currentUserName}</span>
             <button
               type="button"
-              onClick={() => router.push("/")}
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/");
+              }}
               className="rounded-xl px-3 py-1.5 text-sm font-semibold text-[#68736D] hover:bg-[#F1F5F2]"
             >
               Sign out

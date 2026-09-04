@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 
 export default function CaregiverNavigation() {
   const pathname = usePathname();
@@ -14,18 +13,6 @@ export default function CaregiverNavigation() {
     { name: "Reports", href: "/caregiver/reports", icon: "📄" },
     { name: "Help", href: "/help", icon: "❓" },
   ];
-
-  async function handleSignOut() {
-    try {
-      await supabase.auth.signOut();
-      localStorage.removeItem("dementia_auth_user");
-      localStorage.removeItem("active_caregiver_id");
-      localStorage.removeItem("active_player_id");
-    } catch {
-      // ignore
-    }
-    router.push("/");
-  }
 
   return (
     <nav aria-label="Caregiver navigation" className="bg-white border-b border-[#DCE3DD] sticky top-0 z-40">
@@ -68,7 +55,10 @@ export default function CaregiverNavigation() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={handleSignOut}
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/");
+              }}
               className="rounded-xl px-4 py-2 text-sm font-semibold text-[#68736D] hover:bg-[#F1F5F2] hover:text-[#24302A]"
             >
               Sign out

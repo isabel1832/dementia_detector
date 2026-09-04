@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import CaregiverNavigation from "@/app/components/CaregiverNavigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface Player {
   id: string;
@@ -46,6 +47,7 @@ interface Analytics {
 }
 
 export default function CaregiverDashboardPage() {
+  useRequireAuth(["caregiver"]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -56,9 +58,7 @@ export default function CaregiverDashboardPage() {
   useEffect(() => {
     async function loadPlayers() {
       try {
-        const activeCaregiverId = localStorage.getItem("active_caregiver_id");
-        const url = activeCaregiverId ? `/api/caregiver/players?caregiverId=${activeCaregiverId}` : "/api/caregiver/players";
-        const res = await fetch(url);
+        const res = await fetch("/api/caregiver/players");
         if (res.ok) {
           const data = await res.json();
           if (data.players && data.players.length > 0) {
