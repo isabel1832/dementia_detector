@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import PlayerNavigation from "@/app/components/PlayerNavigation";
+import PersistentHelpButton from "@/app/components/PersistentHelpButton";
+import GameHeader from "@/app/components/GameHeader";
+import { PauseModal, ExitConfirmModal, SkipModal } from "@/app/components/GameModals";
+import { useAccessibility } from "@/app/context/AccessibilityContext";
+
+type Difficulty = "easy" | "medium" | "hard";
 
 type Picture = {
   id: number;
@@ -18,328 +26,345 @@ const ALL_PICTURES: Picture[] = [
   { id: 6, emoji: "🍪", name: "Cookie" },
   { id: 7, emoji: "⭐", name: "Star" },
   { id: 8, emoji: "🎈", name: "Balloon" },
+  { id: 9, emoji: "🏠", name: "House" },
+  { id: 10, emoji: "☕", name: "Teacup" },
+  { id: 11, emoji: "🐱", name: "Cat" },
+  { id: 12, emoji: "🌻", name: "Sunflower" },
 ];
 
-const NUMBER_TO_REMEMBER = 4;
+const DIFFICULTY_CONFIG: Record<Difficulty, { rememberCount: number; choicesCount: number }> = {
+  easy: { rememberCount: 3, choicesCount: 6 },
+  medium: { rememberCount: 4, choicesCount: 8 },
+  hard: { rememberCount: 6, choicesCount: 10 },
+};
 
-function choosePictures() {
-  return [...ALL_PICTURES]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, NUMBER_TO_REMEMBER);
-}
-
-function chooseOptions(correctPictures: Picture[]) {
-  const correctIds = new Set(correctPictures.map((picture) => picture.id));
-
-  const incorrectPictures = ALL_PICTURES.filter(
-    (picture) => !correctIds.has(picture.id)
-  )
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 4);
-
-  return [...correctPictures, ...incorrectPictures].sort(
-    () => Math.random() - 0.5
-  );
+function pickRandom<T>(array: T[], count: number): T[] {
+  const shuffled = [...array].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
 }
 
 export default function PictureRecallPage() {
-  const [pictures, setPictures] = useState<Picture[]>(choosePictures);
-  const [options, setOptions] = useState<Picture[]>([]);
-  const [phase, setPhase] = useState<"remember" | "recall" | "complete">(
-    "remember"
-  );
-  const [selected, setSelected] = useState<number[]>([]);
+  const router = useRouter();
+  const { speak, playSound } = useAccessibility();
+
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+  const [phase, setPhase] = useState<"remember" | "recall" | "complete">("remember");
+  const [targetPictures, setTargetPictures] = useState<Picture[]>([]);
+  const [choiceOptions, setChoiceOptions] = useState<Picture[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [seconds, setSeconds] = useState(0);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [submitted, setSubmitted] = useState(false);
+  const [correctCount, setCorrectCount] = useState(0);
+
+  // Modals
+  const [isPaused, setIsPaused] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showSkipModal, setShowSkipModal] = useState(false);
+
+  // Initialize pictures on start or difficulty change
+  const startNewGame = useCallback((diff: Difficulty) => {
+    const config = DIFFICULTY_CONFIG[diff];
+    const targets = pickRandom(ALL_PICTURES, config.rememberCount);
+    setTargetPictures(targets);
+
+    // Prepare choice options: targets + extra incorrect choices
+    const remaining = ALL_PICTURES.filter((p) => !targets.some((t) => t.id === p.id));
+    const distractors = pickRandom(remaining, config.choicesCount - config.rememberCount);
+    const mixed = [...targets, ...distractors].sort(() => Math.random() - 0.5);
+
+    setChoiceOptions(mixed);
+    setSelectedIds([]);
+    setSeconds(0);
+    setCorrectCount(0);
+    setPhase("remember");
+    setIsPaused(false);
+  }, []);
+
+  useEffect(() => {
+    startNewGame(difficulty);
+  }, [difficulty, startNewGame]);
+
+  // Voice instruction when entering remember phase
+  useEffect(() => {
+    if (phase === "remember") {
+      speak("Look at these pictures carefully. When you are ready, tap I'm Ready to begin.");
+    } else if (phase === "recall") {
+      speak("Which pictures did you see? Select the pictures you remember, then check your answers.");
+    }
+  }, [phase, speak]);
 
   // Timer
   useEffect(() => {
-    if (phase === "complete") return;
+    if (phase === "complete" || isPaused) return;
 
     const timer = setInterval(() => {
-      setSeconds((current) => current + 1);
+      setSeconds((s) => s + 1);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [phase]);
+  }, [phase, isPaused]);
 
-  function startRecall() {
-    setOptions(chooseOptions(pictures));
+  function handleReadyClick() {
+    playSound("click");
     setPhase("recall");
   }
 
-  function togglePicture(id: number) {
-    if (submitted) return;
+  function handleToggleChoice(id: number) {
+    if (isPaused) return;
+    playSound("click");
 
-    setSelected((current) => {
-      if (current.includes(id)) {
-        return current.filter((pictureId) => pictureId !== id);
-      }
-
-      return [...current, id];
-    });
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   }
 
-  function checkAnswers() {
-    const correctIds = new Set(pictures.map((picture) => picture.id));
+  function handleCheckAnswers() {
+    playSound("click");
 
-    const correct = selected.filter((id) => correctIds.has(id)).length;
+    const targetIds = new Set(targetPictures.map((p) => p.id));
+    const correct = selectedIds.filter((id) => targetIds.has(id)).length;
+    setCorrectCount(correct);
 
-    const incorrect = selected.filter((id) => !correctIds.has(id)).length;
+    playSound("success");
+    speak(`Great job! You remembered ${correct} out of ${targetPictures.length} pictures.`);
+    setPhase("complete");
 
-    setCorrectAnswers(Math.max(0, correct - incorrect));
-    setSubmitted(true);
-
-    setTimeout(() => {
-      setPhase("complete");
-    }, 1000);
+    // Save session locally
+    try {
+      const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
+      history.push({
+        id: Date.now().toString(),
+        gameType: "PICTURE_RECALL",
+        difficulty,
+        durationSeconds: seconds,
+        accuracy: Math.round((correct / targetPictures.length) * 100),
+        status: "COMPLETED",
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem("dementia_sessions", JSON.stringify(history));
+    } catch {
+      // ignore
+    }
   }
 
-  function restartGame() {
-    const newPictures = choosePictures();
-
-    setPictures(newPictures);
-    setOptions([]);
-    setSelected([]);
-    setSeconds(0);
-    setCorrectAnswers(0);
-    setSubmitted(false);
-    setPhase("remember");
+  function handleExitRequest() {
+    if (phase === "complete" || (phase === "remember" && seconds < 5)) {
+      router.push("/player");
+    } else {
+      setShowExitConfirm(true);
+    }
   }
 
   function formatTime(totalSeconds: number) {
     const minutes = Math.floor(totalSeconds / 60);
-    const secondsRemaining = totalSeconds % 60;
-
-    return `${minutes}:${secondsRemaining.toString().padStart(2, "0")}`;
+    const remaining = totalSeconds % 60;
+    return `${minutes}:${remaining.toString().padStart(2, "0")}`;
   }
 
   return (
-    <main className="min-h-screen bg-[#F7F5EF] text-[#24302A]">
+    <main className="min-h-screen bg-[#F7F5EF] text-[#24302A] pb-24 sm:pb-8">
       <div className="mx-auto min-h-screen max-w-4xl px-6 py-8 sm:px-10">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-[#DCE3DD] pb-6">
-          <Link
-            href="/player"
-            className="flex items-center gap-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#DCE9DF] text-2xl">
-              🧠
-            </div>
+        <GameHeader
+          title="Picture Recall"
+          onPause={() => setIsPaused((p) => !p)}
+          onExitClick={handleExitRequest}
+          onHearInstructions={() => {
+            if (phase === "remember") {
+              speak("Take your time looking at these pictures. When you are ready, tap I'm Ready.");
+            } else {
+              speak("Select the pictures you remember seeing, then tap Check My Answers.");
+            }
+          }}
+          isPaused={isPaused}
+        />
 
-            <span className="text-xl font-semibold tracking-tight">
-              Memory & Puzzle
-            </span>
-          </Link>
-
-          <Link
-            href="/player"
-            className="rounded-xl px-5 py-3 text-base font-semibold text-[#315C43] hover:bg-[#E8EFE9]"
-          >
-            Exit
-          </Link>
-        </header>
-
-        {/* Remember phase */}
+        {/* Remember Phase */}
         {phase === "remember" && (
-          <section className="py-10">
+          <section className="py-8">
             <div className="text-center">
               <p className="text-lg font-semibold text-[#557461]">
                 Picture Recall
               </p>
 
-              <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
+              <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
                 Remember these pictures
               </h1>
 
-              <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-[#68736D]">
-                Take a moment to look at these pictures. Try to remember all
-                of them.
+              <p className="mx-auto mt-2 max-w-2xl text-lg leading-7 text-[#68736D]">
+                Take all the time you need. When you feel ready, tap below.
               </p>
+
+              {/* Difficulty selector */}
+              <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-[#DCE3DD] bg-white p-1.5 shadow-sm">
+                <span className="px-3 text-sm font-semibold text-[#68736D]">Difficulty:</span>
+                {(["easy", "medium", "hard"] as const).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => {
+                      playSound("click");
+                      setDifficulty(level);
+                    }}
+                    className={`rounded-xl px-4 py-2 text-base capitalize font-bold transition ${
+                      difficulty === level
+                        ? "bg-[#315C43] text-white shadow-xs"
+                        : "text-[#68736D] hover:bg-[#F1F5F2]"
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Pictures */}
-            <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-5 sm:grid-cols-4">
-              {pictures.map((picture) => (
+            {/* Target Pictures Display */}
+            <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 sm:grid-cols-3 gap-5">
+              {targetPictures.map((picture) => (
                 <div
                   key={picture.id}
-                  className="flex aspect-square flex-col items-center justify-center rounded-3xl border-2 border-[#DCE3DD] bg-white shadow-sm"
+                  className="flex aspect-square flex-col items-center justify-center rounded-3xl border-2 border-[#DCE3DD] bg-white p-4 shadow-sm"
                 >
-                  <span className="text-6xl sm:text-7xl">
+                  <span className="text-6xl sm:text-7xl" aria-hidden="true">
                     {picture.emoji}
                   </span>
-
-                  <span className="mt-3 text-base font-semibold text-[#68736D]">
+                  <span className="mt-3 text-xl font-bold text-[#24302A]">
                     {picture.name}
                   </span>
                 </div>
               ))}
             </div>
 
-            {/* Start button */}
-            <div className="mt-10 flex justify-center">
+            {/* Ready Button */}
+            <div className="mt-10 flex flex-col items-center gap-4">
               <button
                 type="button"
-                onClick={startRecall}
-                className="min-h-16 rounded-2xl bg-[#315C43] px-10 text-lg font-bold text-white transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
+                onClick={handleReadyClick}
+                className="min-h-16 rounded-2xl bg-[#315C43] px-12 text-xl font-bold text-white shadow-sm transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
               >
                 I&apos;m Ready
               </button>
-            </div>
 
-            <div className="mx-auto mt-6 max-w-xl rounded-2xl bg-[#EDF4EE] p-5 text-center">
-              <p className="text-lg font-semibold text-[#56615B]">
-                Take your time. There is no rush.
-              </p>
+              <button
+                type="button"
+                onClick={() => setShowSkipModal(true)}
+                className="text-base font-semibold text-[#68736D] underline hover:text-[#24302A]"
+              >
+                Skip this activity
+              </button>
             </div>
           </section>
         )}
 
-        {/* Recall phase */}
+        {/* Recall Phase */}
         {phase === "recall" && (
-          <section className="py-10">
+          <section className="py-8">
             <div className="text-center">
               <p className="text-lg font-semibold text-[#557461]">
                 Picture Recall
               </p>
 
-              <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
+              <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
                 Which pictures did you see?
               </h1>
 
-              <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-[#68736D]">
-                Select the pictures you remember seeing.
+              <p className="mx-auto mt-2 max-w-2xl text-lg leading-7 text-[#68736D]">
+                Select the {targetPictures.length} pictures you remember.
               </p>
             </div>
 
-            {/* Timer */}
-            <div className="mt-6 flex justify-center">
-              <div className="rounded-full bg-white px-5 py-3 text-base font-semibold shadow-sm">
-                ⏱ {formatTime(seconds)}
-              </div>
-            </div>
-
-            {/* Options */}
-            <div className="mx-auto mt-8 grid max-w-2xl grid-cols-2 gap-5 sm:grid-cols-4">
-              {options.map((picture) => {
-                const isSelected = selected.includes(picture.id);
-
-                const isCorrect =
-                  submitted &&
-                  pictures.some((item) => item.id === picture.id);
-
-                const isIncorrect =
-                  submitted &&
-                  isSelected &&
-                  !pictures.some((item) => item.id === picture.id);
+            {/* Options Grid */}
+            <div className="mx-auto mt-8 grid max-w-3xl grid-cols-2 sm:grid-cols-4 gap-4">
+              {choiceOptions.map((item) => {
+                const isSelected = selectedIds.includes(item.id);
 
                 return (
                   <button
-                    key={picture.id}
+                    key={item.id}
                     type="button"
-                    onClick={() => togglePicture(picture.id)}
-                    disabled={submitted}
-                    className={`flex aspect-square flex-col items-center justify-center rounded-3xl border-4 bg-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#B8CEBD] ${
-                      isCorrect
-                        ? "border-[#315C43] bg-[#EDF4EE]"
-                        : isIncorrect
-                          ? "border-[#A85D5D] bg-[#F9EEEE]"
-                          : isSelected
-                            ? "border-[#315C43] bg-[#EDF4EE]"
-                            : "border-[#DCE3DD] hover:bg-[#F1F5F2]"
+                    onClick={() => handleToggleChoice(item.id)}
+                    aria-pressed={isSelected}
+                    className={`flex aspect-square flex-col items-center justify-center rounded-3xl border-4 p-3 shadow-sm transition focus:outline-none focus:ring-4 focus:ring-[#B8CEBD] ${
+                      isSelected
+                        ? "border-[#315C43] bg-[#EDF4EE] scale-102"
+                        : "border-[#DCE3DD] bg-white hover:bg-[#F1F5F2]"
                     }`}
                   >
-                    <span className="text-6xl sm:text-7xl">
-                      {picture.emoji}
+                    <span className="text-5xl sm:text-6xl" aria-hidden="true">
+                      {item.emoji}
                     </span>
-
-                    <span className="mt-3 text-base font-semibold">
-                      {picture.name}
+                    <span className="mt-2 text-base sm:text-lg font-bold">
+                      {item.name}
                     </span>
+                    {isSelected && (
+                      <span className="mt-1 rounded-full bg-[#315C43] px-2 py-0.5 text-xs font-bold text-white">
+                        Selected
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            {/* Check button */}
-            {!submitted && (
-              <div className="mt-10 flex justify-center">
-                <button
-                  type="button"
-                  onClick={checkAnswers}
-                  disabled={selected.length === 0}
-                  className="min-h-16 rounded-2xl bg-[#315C43] px-10 text-lg font-bold text-white transition hover:bg-[#274C36] disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
-                >
-                  Check My Answers
-                </button>
-              </div>
-            )}
+            {/* Check Answers Button */}
+            <div className="mt-10 flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={handleCheckAnswers}
+                disabled={selectedIds.length === 0}
+                className="min-h-16 rounded-2xl bg-[#315C43] px-10 text-xl font-bold text-white shadow-sm transition hover:bg-[#274C36] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
+              >
+                Check My Answers ({selectedIds.length} chosen)
+              </button>
 
-            {/* Feedback */}
-            {submitted && (
-              <div className="mt-8 rounded-2xl bg-[#EDF4EE] p-5 text-center">
-                <p className="text-lg font-semibold text-[#56615B]">
-                  Nice work! Let&apos;s see how you did.
-                </p>
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={() => setShowSkipModal(true)}
+                className="text-base font-semibold text-[#68736D] underline hover:text-[#24302A]"
+              >
+                Skip this activity
+              </button>
+            </div>
           </section>
         )}
 
-        {/* Completion */}
+        {/* Completion Phase */}
         {phase === "complete" && (
-          <section className="flex min-h-[70vh] items-center justify-center py-12">
-            <div className="w-full max-w-xl rounded-[2rem] border border-[#D6E0D8] bg-white p-8 text-center shadow-sm sm:p-12">
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#EDF4EE] text-4xl">
+          <section className="flex min-h-[70vh] items-center justify-center py-10">
+            <div className="w-full max-w-xl rounded-[2rem] border-2 border-[#D6E0D8] bg-white p-8 text-center shadow-md sm:p-12">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#EDF4EE] text-4xl" aria-hidden="true">
                 🎉
               </div>
 
-              <p className="mt-7 text-lg font-semibold text-[#557461]">
-                Great job!
+              <p className="mt-6 text-lg font-semibold text-[#557461]">
+                Great effort!
               </p>
 
-              <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
-                You completed the activity.
+              <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
+                You completed Picture Recall.
               </h1>
 
-              <p className="mt-5 text-xl leading-8 text-[#68736D]">
-                You remembered {correctAnswers} out of {pictures.length}{" "}
-                pictures.
+              <p className="mt-4 text-xl leading-8 text-[#68736D]">
+                You remembered {correctCount} out of {targetPictures.length} pictures. Every session is great practice.
               </p>
 
-              {/* Results */}
               <div className="mt-8 grid grid-cols-2 gap-4">
-                <div className="rounded-2xl bg-[#F7F5EF] p-5">
-                  <p className="text-sm font-semibold text-[#68736D]">
-                    Pictures remembered
-                  </p>
-
-                  <p className="mt-1 text-2xl font-bold">
-                    {correctAnswers} / {pictures.length}
+                <div className="rounded-2xl bg-[#F7F5EF] p-4">
+                  <p className="text-sm font-semibold text-[#68736D]">Remembered</p>
+                  <p className="mt-1 text-2xl font-bold text-[#315C43]">
+                    {correctCount} / {targetPictures.length}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-[#F7F5EF] p-5">
-                  <p className="text-sm font-semibold text-[#68736D]">
-                    Time
-                  </p>
-
-                  <p className="mt-1 text-2xl font-bold">
-                    {formatTime(seconds)}
-                  </p>
+                <div className="rounded-2xl bg-[#F7F5EF] p-4">
+                  <p className="text-sm font-semibold text-[#68736D]">Time</p>
+                  <p className="mt-1 text-2xl font-bold">{formatTime(seconds)}</p>
                 </div>
               </div>
-
-              <p className="mt-8 text-lg leading-7 text-[#56615B]">
-                Every activity is an opportunity to practice. Nice work!
-              </p>
 
               <div className="mt-8 flex flex-col gap-3">
                 <button
                   type="button"
-                  onClick={restartGame}
-                  className="min-h-16 rounded-2xl bg-[#315C43] px-6 text-lg font-bold text-white transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
+                  onClick={() => startNewGame(difficulty)}
+                  className="flex min-h-16 items-center justify-center rounded-2xl bg-[#315C43] px-6 text-lg font-bold text-white transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
                 >
                   Play Again
                 </button>
@@ -354,12 +379,29 @@ export default function PictureRecallPage() {
             </div>
           </section>
         )}
-
-        {/* Footer */}
-        <footer className="border-t border-[#DCE3DD] py-6 text-center text-sm text-[#68736D]">
-          <p>Simple. Encouraging. Accessible.</p>
-        </footer>
       </div>
+
+      {/* Modals */}
+      <PauseModal
+        isOpen={isPaused}
+        onResume={() => setIsPaused(false)}
+        onExit={() => router.push("/player")}
+      />
+
+      <ExitConfirmModal
+        isOpen={showExitConfirm}
+        onContinue={() => setShowExitConfirm(false)}
+        onConfirmExit={() => router.push("/player")}
+      />
+
+      <SkipModal
+        isOpen={showSkipModal}
+        onStay={() => setShowSkipModal(false)}
+        onSkip={() => router.push("/player")}
+      />
+
+      <PlayerNavigation />
+      <PersistentHelpButton />
     </main>
   );
 }

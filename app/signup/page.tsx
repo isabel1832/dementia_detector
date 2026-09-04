@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accountType, setAccountType] = useState<"player" | "caregiver">("player");
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -17,25 +19,27 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role: accountType,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setErrorMsg(data.error || "Sign in failed. Please check your details.");
+        setErrorMsg(data.error || "Signup failed. Please try again.");
         return;
       }
 
-      // Route according to user role
-      if (data.user.role === "caregiver") {
+      if (accountType === "caregiver") {
         router.push("/caregiver/dashboard");
-      } else if (data.user.role === "professional") {
-        router.push("/professional/dashboard");
       } else {
-        router.push("/player");
+        router.push("/onboarding");
       }
     } catch {
       setErrorMsg("An unexpected network error occurred. Please try again.");
@@ -63,7 +67,7 @@ export default function LoginPage() {
           </Link>
         </header>
 
-        {/* Login form */}
+        {/* Sign up */}
         <section className="flex flex-1 items-center justify-center py-12">
           <div className="w-full max-w-md">
             <div className="rounded-[2rem] border border-[#DCE3DD] bg-white p-7 shadow-sm sm:p-10">
@@ -73,11 +77,11 @@ export default function LoginPage() {
                 </div>
 
                 <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">
-                  Welcome back
+                  Create your account
                 </h1>
 
                 <p className="mt-3 text-lg leading-7 text-[#68736D]">
-                  Sign in to continue to your activities or caregiver dashboard.
+                  Join Memory & Puzzle to start your activities.
                 </p>
               </div>
 
@@ -88,6 +92,28 @@ export default function LoginPage() {
               )}
 
               <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                {/* Name */}
+                <div>
+                  <label
+                    htmlFor="name"
+                    className="mb-2 block text-lg font-semibold"
+                  >
+                    Your name
+                  </label>
+
+                  <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoComplete="name"
+                    placeholder="Enter your name"
+                    className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-lg outline-none transition placeholder:text-[#8A938E] focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
+                  />
+                </div>
+
                 {/* Email */}
                 <div>
                   <label
@@ -112,21 +138,12 @@ export default function LoginPage() {
 
                 {/* Password */}
                 <div>
-                  <div className="mb-2 flex items-center justify-between gap-4">
-                    <label
-                      htmlFor="password"
-                      className="block text-lg font-semibold"
-                    >
-                      Password
-                    </label>
-
-                    <Link
-                      href="/help"
-                      className="text-base font-semibold text-[#315C43] underline-offset-4 hover:underline"
-                    >
-                      Need help?
-                    </Link>
-                  </div>
+                  <label
+                    htmlFor="password"
+                    className="mb-2 block text-lg font-semibold"
+                  >
+                    Password
+                  </label>
 
                   <input
                     id="password"
@@ -135,53 +152,93 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
+                    autoComplete="new-password"
+                    placeholder="Create a password"
                     className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-lg outline-none transition placeholder:text-[#8A938E] focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
                   />
                 </div>
 
-                {/* Demo quick logins helper */}
-                <div className="rounded-xl bg-[#F7F5EF] p-3 text-xs text-[#68736D] space-y-1">
-                  <p className="font-bold">Demo Accounts:</p>
-                  <p>Caregiver: <span className="font-mono text-[#315C43]">caregiver@example.com</span> / password123</p>
-                  <p>Clinician: <span className="font-mono text-[#315C43]">doctor@example.com</span> / password123</p>
+                {/* Account type */}
+                <div>
+                  <label className="mb-3 block text-lg font-semibold">
+                    I am a:
+                  </label>
+
+                  <div className="space-y-3">
+                    <label
+                      onClick={() => setAccountType("player")}
+                      className={`flex min-h-16 cursor-pointer items-center gap-4 rounded-2xl border-2 px-5 transition focus:outline-none focus:ring-4 focus:ring-[#D5E2D8] ${
+                        accountType === "player"
+                          ? "border-[#315C43] bg-[#EDF4EE]"
+                          : "border-[#DCE3DD] hover:bg-[#F8FAF8]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="accountType"
+                        value="player"
+                        checked={accountType === "player"}
+                        onChange={() => setAccountType("player")}
+                        className="h-6 w-6 accent-[#315C43]"
+                      />
+
+                      <div>
+                        <span className="block text-lg font-bold">
+                          Player
+                        </span>
+                        <span className="text-base text-[#68736D]">
+                          I want to play the activities
+                        </span>
+                      </div>
+                    </label>
+
+                    <label
+                      onClick={() => setAccountType("caregiver")}
+                      className={`flex min-h-16 cursor-pointer items-center gap-4 rounded-2xl border-2 px-5 transition focus:outline-none focus:ring-4 focus:ring-[#D5E2D8] ${
+                        accountType === "caregiver"
+                          ? "border-[#315C43] bg-[#EDF4EE]"
+                          : "border-[#DCE3DD] hover:bg-[#F8FAF8]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="accountType"
+                        value="caregiver"
+                        checked={accountType === "caregiver"}
+                        onChange={() => setAccountType("caregiver")}
+                        className="h-6 w-6 accent-[#315C43]"
+                      />
+
+                      <div>
+                        <span className="block text-lg font-bold">
+                          Caregiver
+                        </span>
+                        <span className="text-base text-[#68736D]">
+                          I want to support a player
+                        </span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Sign in button */}
+                {/* Create account button */}
                 <button
                   type="submit"
                   disabled={isLoading}
                   className="min-h-16 w-full rounded-2xl bg-[#315C43] px-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#274C36] disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
                 >
-                  {isLoading ? "Signing in..." : "Sign in"}
+                  {isLoading ? "Creating account..." : "Create account"}
                 </button>
               </form>
 
-              {/* Access code divider */}
-              <div className="my-8 flex items-center gap-4">
-                <div className="h-px flex-1 bg-[#DCE3DD]" />
-                <span className="text-sm font-semibold text-[#7A847E]">
-                  OR
-                </span>
-                <div className="h-px flex-1 bg-[#DCE3DD]" />
-              </div>
-
-              <Link
-                href="/access-code"
-                className="flex min-h-16 w-full items-center justify-center rounded-2xl border-2 border-[#B9C8BD] bg-white px-6 text-lg font-bold text-[#315C43] transition hover:bg-[#F1F5F2] focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
-              >
-                Use a 6-digit access code
-              </Link>
-
-              {/* Create account */}
+              {/* Sign in link */}
               <p className="mt-8 text-center text-base text-[#68736D]">
-                Don&apos;t have an account?{" "}
+                Already have an account?{" "}
                 <Link
-                  href="/signup"
+                  href="/login"
                   className="font-bold text-[#315C43] underline-offset-4 hover:underline"
                 >
-                  Create one
+                  Sign in
                 </Link>
               </p>
             </div>

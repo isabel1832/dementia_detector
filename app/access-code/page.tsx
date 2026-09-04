@@ -4,10 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
+export default function AccessCodePage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -20,25 +19,18 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ accessCode }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setErrorMsg(data.error || "Sign in failed. Please check your details.");
+        setErrorMsg(data.error || "Code not recognized. Please check with your caregiver.");
         return;
       }
 
-      // Route according to user role
-      if (data.user.role === "caregiver") {
-        router.push("/caregiver/dashboard");
-      } else if (data.user.role === "professional") {
-        router.push("/professional/dashboard");
-      } else {
-        router.push("/player");
-      }
+      router.push("/player");
     } catch {
-      setErrorMsg("An unexpected network error occurred. Please try again.");
+      setErrorMsg("Unable to connect. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -63,21 +55,21 @@ export default function LoginPage() {
           </Link>
         </header>
 
-        {/* Login form */}
+        {/* Access code form */}
         <section className="flex flex-1 items-center justify-center py-12">
           <div className="w-full max-w-md">
             <div className="rounded-[2rem] border border-[#DCE3DD] bg-white p-7 shadow-sm sm:p-10">
               <div className="text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EDF4EE] text-3xl" aria-hidden="true">
-                  👋
+                  🔑
                 </div>
 
                 <h1 className="mt-6 text-3xl font-bold tracking-tight sm:text-4xl">
-                  Welcome back
+                  Enter your access code
                 </h1>
 
                 <p className="mt-3 text-lg leading-7 text-[#68736D]">
-                  Sign in to continue to your activities or caregiver dashboard.
+                  If your caregiver gave you a code, enter it here to sign in.
                 </p>
               </div>
 
@@ -88,77 +80,39 @@ export default function LoginPage() {
               )}
 
               <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                {/* Email */}
+                {/* Access code input */}
                 <div>
                   <label
-                    htmlFor="email"
+                    htmlFor="accessCode"
                     className="mb-2 block text-lg font-semibold"
                   >
-                    Email address
+                    6-digit code
                   </label>
 
                   <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="accessCode"
+                    name="accessCode"
+                    type="text"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value)}
                     required
-                    autoComplete="email"
-                    placeholder="Enter your email"
-                    className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-lg outline-none transition placeholder:text-[#8A938E] focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
+                    placeholder="e.g. 482 731"
+                    maxLength={8}
+                    className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-center text-3xl font-bold tracking-widest outline-none transition placeholder:text-[#8A938E] placeholder:font-normal placeholder:text-lg placeholder:tracking-normal focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
                   />
-                </div>
-
-                {/* Password */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-4">
-                    <label
-                      htmlFor="password"
-                      className="block text-lg font-semibold"
-                    >
-                      Password
-                    </label>
-
-                    <Link
-                      href="/help"
-                      className="text-base font-semibold text-[#315C43] underline-offset-4 hover:underline"
-                    >
-                      Need help?
-                    </Link>
-                  </div>
-
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
-                    className="min-h-16 w-full rounded-2xl border-2 border-[#C9D4CC] bg-[#FCFCFA] px-5 text-lg outline-none transition placeholder:text-[#8A938E] focus:border-[#315C43] focus:ring-4 focus:ring-[#DCE9DF]"
-                  />
-                </div>
-
-                {/* Demo quick logins helper */}
-                <div className="rounded-xl bg-[#F7F5EF] p-3 text-xs text-[#68736D] space-y-1">
-                  <p className="font-bold">Demo Accounts:</p>
-                  <p>Caregiver: <span className="font-mono text-[#315C43]">caregiver@example.com</span> / password123</p>
-                  <p>Clinician: <span className="font-mono text-[#315C43]">doctor@example.com</span> / password123</p>
                 </div>
 
                 {/* Sign in button */}
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || accessCode.trim().length === 0}
                   className="min-h-16 w-full rounded-2xl bg-[#315C43] px-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#274C36] disabled:opacity-50 focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
                 >
-                  {isLoading ? "Signing in..." : "Sign in"}
+                  {isLoading ? "Checking code..." : "Sign in with access code"}
                 </button>
               </form>
 
-              {/* Access code divider */}
+              {/* Regular login */}
               <div className="my-8 flex items-center gap-4">
                 <div className="h-px flex-1 bg-[#DCE3DD]" />
                 <span className="text-sm font-semibold text-[#7A847E]">
@@ -168,22 +122,21 @@ export default function LoginPage() {
               </div>
 
               <Link
-                href="/access-code"
+                href="/login"
                 className="flex min-h-16 w-full items-center justify-center rounded-2xl border-2 border-[#B9C8BD] bg-white px-6 text-lg font-bold text-[#315C43] transition hover:bg-[#F1F5F2] focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
               >
-                Use a 6-digit access code
+                Use email and password
               </Link>
+            </div>
 
-              {/* Create account */}
-              <p className="mt-8 text-center text-base text-[#68736D]">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-bold text-[#315C43] underline-offset-4 hover:underline"
-                >
-                  Create one
-                </Link>
-              </p>
+            {/* Help */}
+            <div className="mt-6 text-center">
+              <Link
+                href="/help"
+                className="text-base font-semibold text-[#557461] underline-offset-4 hover:underline"
+              >
+                Need help finding your code?
+              </Link>
             </div>
           </div>
         </section>
