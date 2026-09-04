@@ -141,13 +141,6 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {/* Demo quick logins helper */}
-                <div className="rounded-xl bg-[#F7F5EF] p-3 text-xs text-[#68736D] space-y-1">
-                  <p className="font-bold">Demo Accounts:</p>
-                  <p>Caregiver: <span className="font-mono text-[#315C43]">caregiver@example.com</span> / password123</p>
-                  <p>Clinician: <span className="font-mono text-[#315C43]">doctor@example.com</span> / password123</p>
-                </div>
-
                 {/* Sign in button */}
                 <button
                   type="submit"

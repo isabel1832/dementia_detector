@@ -55,7 +55,10 @@ export default function CaregiverNavigation() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => router.push("/")}
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/");
+              }}
               className="rounded-xl px-4 py-2 text-sm font-semibold text-[#68736D] hover:bg-[#F1F5F2] hover:text-[#24302A]"
             >
               Sign out

@@ -4,8 +4,10 @@ import Link from "next/link";
 import PlayerNavigation from "@/app/components/PlayerNavigation";
 import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 export default function PlayerHomePage() {
+  useRequireAuth(["player"]);
   const { speak } = useAccessibility();
 
   return (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import PlayerNavigation from "@/app/components/PlayerNavigation";
 import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface SessionItem {
   id: string;
@@ -16,6 +17,7 @@ interface SessionItem {
 }
 
 export default function PlayerProgressPage() {
+  useRequireAuth(["player"]);
   const { speak } = useAccessibility();
   const [totalCompleted, setTotalCompleted] = useState<number>(0);
   const [thisWeekCount, setThisWeekCount] = useState<number>(0);

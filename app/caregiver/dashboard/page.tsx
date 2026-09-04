@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import CaregiverNavigation from "@/app/components/CaregiverNavigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface Player {
   id: string;
@@ -46,6 +47,7 @@ interface Analytics {
 }
 
 export default function CaregiverDashboardPage() {
+  useRequireAuth(["caregiver"]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [analytics, setAnalytics] = useState<Analytics | null>(null);

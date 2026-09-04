@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CaregiverNavigation from "@/app/components/CaregiverNavigation";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 interface Player {
   id: string;
@@ -14,6 +15,7 @@ interface Player {
 }
 
 export default function CaregiverPlayersPage() {
+  useRequireAuth(["caregiver"]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [accessCodeInput, setAccessCodeInput] = useState("");
   const [relationshipInput, setRelationshipInput] = useState("Family Member");

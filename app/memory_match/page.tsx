@@ -8,6 +8,7 @@ import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import GameHeader from "@/app/components/GameHeader";
 import { PauseModal, ExitConfirmModal, SkipModal } from "@/app/components/GameModals";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -45,6 +46,7 @@ function generateCards(difficulty: Difficulty): Card[] {
 }
 
 export default function MemoryMatchPage() {
+  useRequireAuth(["player"]);
   const router = useRouter();
   const { speak, playSound } = useAccessibility();
 
@@ -121,23 +123,25 @@ export default function MemoryMatchPage() {
       playSound("success");
       speak("Great job! You found all of the matching pairs.");
 
-      // Save to local storage session history for immediate feedback
-      try {
-        const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
-        history.push({
-          id: Date.now().toString(),
+      // Record the completed session so it shows up in the player's
+      // progress and the caregiver's dashboard.
+      const accuracy = Math.min(100, Math.round((totalPairs / attempts) * 100));
+      fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           gameType: "MEMORY_MATCH",
           difficulty,
           durationSeconds: seconds,
           attempts,
           hintsUsed,
+          accuracy,
           status: "COMPLETED",
-          createdAt: new Date().toISOString(),
-        });
-        localStorage.setItem("dementia_sessions", JSON.stringify(history));
-      } catch {
-        // ignore
-      }
+        }),
+      }).catch(() => {
+        // Non-fatal: the player still sees their completion screen even if
+        // this request fails (e.g. offline).
+      });
     }
   }, [matches, totalPairs, playSound, speak, difficulty, seconds, attempts, hintsUsed]);
 

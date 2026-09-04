@@ -8,6 +8,7 @@ import PersistentHelpButton from "@/app/components/PersistentHelpButton";
 import GameHeader from "@/app/components/GameHeader";
 import { PauseModal, ExitConfirmModal, SkipModal } from "@/app/components/GameModals";
 import { useAccessibility } from "@/app/context/AccessibilityContext";
+import { useRequireAuth } from "@/app/hooks/useRequireAuth";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -44,6 +45,7 @@ function pickRandom<T>(array: T[], count: number): T[] {
 }
 
 export default function PictureRecallPage() {
+  useRequireAuth(["player"]);
   const router = useRouter();
   const { speak, playSound } = useAccessibility();
 
@@ -128,22 +130,22 @@ export default function PictureRecallPage() {
     speak(`Great job! You remembered ${correct} out of ${targetPictures.length} pictures.`);
     setPhase("complete");
 
-    // Save session locally
-    try {
-      const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
-      history.push({
-        id: Date.now().toString(),
+    // Record the completed session so it shows up in the player's
+    // progress and the caregiver's dashboard.
+    fetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         gameType: "PICTURE_RECALL",
         difficulty,
         durationSeconds: seconds,
         accuracy: Math.round((correct / targetPictures.length) * 100),
         status: "COMPLETED",
-        createdAt: new Date().toISOString(),
-      });
-      localStorage.setItem("dementia_sessions", JSON.stringify(history));
-    } catch {
-      // ignore
-    }
+      }),
+    }).catch(() => {
+      // Non-fatal: the player still sees their completion screen even if
+      // this request fails (e.g. offline).
+    });
   }
 
   function handleExitRequest() {
