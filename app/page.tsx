@@ -44,17 +44,26 @@ export default function Home() {
 
               <div className="mt-9 flex flex-col gap-4 sm:flex-row">
                 <Link
-                  href="/login"
+                  href="/signup"
                   className="flex min-h-16 items-center justify-center rounded-2xl bg-[#315C43] px-8 text-lg font-bold text-white shadow-sm transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
                 >
-                  Get started
+                  Create account
                 </Link>
 
                 <Link
                   href="/login"
                   className="flex min-h-16 items-center justify-center rounded-2xl border-2 border-[#B9C8BD] bg-white px-8 text-lg font-bold text-[#315C43] transition hover:bg-[#F1F5F2] focus:outline-none focus:ring-4 focus:ring-[#D5E2D8]"
                 >
-                  I have an access code
+                  Sign in
+                </Link>
+              </div>
+
+              <div className="mt-4">
+                <Link
+                  href="/access-code"
+                  className="text-base font-semibold text-[#557461] underline-offset-4 hover:underline"
+                >
+                  I have a 6-digit access code →
                 </Link>
               </div>
 
