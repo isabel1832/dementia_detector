@@ -56,7 +56,9 @@ export default function CaregiverDashboardPage() {
   useEffect(() => {
     async function loadPlayers() {
       try {
-        const res = await fetch("/api/caregiver/players");
+        const activeCaregiverId = localStorage.getItem("active_caregiver_id");
+        const url = activeCaregiverId ? `/api/caregiver/players?caregiverId=${activeCaregiverId}` : "/api/caregiver/players";
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.players && data.players.length > 0) {

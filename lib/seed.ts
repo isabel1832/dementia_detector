@@ -1,6 +1,6 @@
-import { getDb, createUser, createPlayer, connectPlayerToCaregiver, recordGameSession } from "./db";
+import { getDb, createUser, createPlayer, connectPlayerToCaregiver } from "./db";
 
-export function seedDatabase() {
+export async function seedDatabase() {
   const db = getDb();
 
   // Check if users already seeded
@@ -10,7 +10,7 @@ export function seedDatabase() {
   }
 
   // 1. Create Caregiver User
-  const caregiver = createUser({
+  const caregiver = await createUser({
     name: "Eleanor Vance",
     email: "caregiver@example.com",
     password: "password123",
@@ -18,7 +18,7 @@ export function seedDatabase() {
   });
 
   // 2. Create Professional / Clinician User
-  const clinician = createUser({
+  const clinician = await createUser({
     name: "Dr. Evelyn Reed",
     email: "doctor@example.com",
     password: "password123",
@@ -26,18 +26,18 @@ export function seedDatabase() {
   });
 
   // 3. Create Demo Players
-  const player1 = createPlayer({ firstName: "Sarah", lastName: "Lee" });
-  const player2 = createPlayer({ firstName: "Robert", lastName: "Davis" });
-  const player3 = createPlayer({ firstName: "Maria", lastName: "Garcia" });
+  const player1 = await createPlayer({ firstName: "Sarah", lastName: "Lee" });
+  const player2 = await createPlayer({ firstName: "Robert", lastName: "Davis" });
+  const player3 = await createPlayer({ firstName: "Maria", lastName: "Garcia" });
 
   // 4. Connect players to caregiver & clinician
-  connectPlayerToCaregiver(caregiver.id, player1.accessCode, "Mother");
-  connectPlayerToCaregiver(caregiver.id, player2.accessCode, "Father");
-  connectPlayerToCaregiver(caregiver.id, player3.accessCode, "Aunt");
+  await connectPlayerToCaregiver(caregiver.id, player1.accessCode, "Mother");
+  await connectPlayerToCaregiver(caregiver.id, player2.accessCode, "Father");
+  await connectPlayerToCaregiver(caregiver.id, player3.accessCode, "Aunt");
 
-  connectPlayerToCaregiver(clinician.id, player1.accessCode, "Patient");
-  connectPlayerToCaregiver(clinician.id, player2.accessCode, "Patient");
-  connectPlayerToCaregiver(clinician.id, player3.accessCode, "Patient");
+  await connectPlayerToCaregiver(clinician.id, player1.accessCode, "Patient");
+  await connectPlayerToCaregiver(clinician.id, player2.accessCode, "Patient");
+  await connectPlayerToCaregiver(clinician.id, player3.accessCode, "Patient");
 
   // 5. Seed realistic historical sessions for Sarah Lee (18 sessions across 30 days)
   const now = Date.now();
@@ -121,8 +121,6 @@ export function seedDatabase() {
 }
 
 // Auto seed on import if empty
-try {
-  seedDatabase();
-} catch (e) {
+seedDatabase().catch((e) => {
   console.error("Seed error:", e);
-}
+});

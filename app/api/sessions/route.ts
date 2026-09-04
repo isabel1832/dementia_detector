@@ -1,23 +1,33 @@
 import { NextResponse } from "next/server";
-import { recordGameSession, getPlayerSessions, getPlayerAnalytics, getDb } from "@/lib/db";
+import { recordGameSession, getPlayerAnalytics, getDb } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Default to the first demo player Sarah if playerId isn't passed
+    // Default to the first available player if playerId isn't passed
     let playerId = body.playerId;
     if (!playerId) {
-      const db = getDb();
-      const firstPlayer = db.prepare("SELECT id FROM players LIMIT 1").get() as { id: string } | undefined;
-      playerId = firstPlayer?.id;
+      try {
+        const { data } = await supabase.from("players").select("id").limit(1).maybeSingle();
+        if (data?.id) playerId = data.id;
+      } catch {
+        // ignore
+      }
+
+      if (!playerId) {
+        const db = getDb();
+        const firstPlayer = db.prepare("SELECT id FROM players LIMIT 1").get() as { id: string } | undefined;
+        playerId = firstPlayer?.id;
+      }
     }
 
     if (!playerId) {
       return NextResponse.json({ error: "Player ID is required." }, { status: 400 });
     }
 
-    const session = recordGameSession({
+    const session = await recordGameSession({
       playerId,
       gameType: body.gameType,
       difficulty: body.difficulty || "medium",
@@ -46,16 +56,25 @@ export async function GET(req: Request) {
     let playerId: string | undefined = searchParams.get("playerId") ?? undefined;
 
     if (!playerId) {
-      const db = getDb();
-      const firstPlayer = db.prepare("SELECT id FROM players LIMIT 1").get() as { id: string } | undefined;
-      playerId = firstPlayer?.id;
+      try {
+        const { data } = await supabase.from("players").select("id").limit(1).maybeSingle();
+        if (data?.id) playerId = data.id;
+      } catch {
+        // ignore
+      }
+
+      if (!playerId) {
+        const db = getDb();
+        const firstPlayer = db.prepare("SELECT id FROM players LIMIT 1").get() as { id: string } | undefined;
+        playerId = firstPlayer?.id;
+      }
     }
 
     if (!playerId) {
       return NextResponse.json({ error: "No players found" }, { status: 404 });
     }
 
-    const analytics = getPlayerAnalytics(playerId);
+    const analytics = await getPlayerAnalytics(playerId);
     return NextResponse.json({ success: true, analytics });
   } catch (error: unknown) {
     console.error("Get sessions error:", error);

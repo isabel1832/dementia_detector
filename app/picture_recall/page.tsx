@@ -130,17 +130,35 @@ export default function PictureRecallPage() {
 
     // Save session locally
     try {
+      const accuracy = Math.round((correct / targetPictures.length) * 100);
       const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
       history.push({
         id: Date.now().toString(),
         gameType: "PICTURE_RECALL",
         difficulty,
         durationSeconds: seconds,
-        accuracy: Math.round((correct / targetPictures.length) * 100),
+        accuracy,
         status: "COMPLETED",
         createdAt: new Date().toISOString(),
       });
       localStorage.setItem("dementia_sessions", JSON.stringify(history));
+
+      // Persist to backend / Supabase
+      const activePlayerId = localStorage.getItem("active_player_id") || undefined;
+      fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId: activePlayerId,
+          gameType: "PICTURE_RECALL",
+          difficulty,
+          durationSeconds: seconds,
+          score: accuracy,
+          accuracy,
+          attempts: 1,
+          status: "COMPLETED",
+        }),
+      }).catch((err) => console.warn("Session save warning:", err));
     } catch {
       // ignore
     }

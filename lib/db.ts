@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { supabase } from "./supabase";
 
 const DB_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "memory_app.sqlite");
@@ -94,12 +95,16 @@ export function hashPassword(password: string): { hash: string; salt: string } {
 }
 
 export function verifyPassword(password: string, hash: string, salt: string): boolean {
-  const checkHash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(checkHash, "hex"));
+  try {
+    const checkHash = crypto.scryptSync(password, salt, 64).toString("hex");
+    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(checkHash, "hex"));
+  } catch {
+    return false;
+  }
 }
 
-// User Helpers
-export function createUser(params: {
+// User Helpers (Supabase-first with SQLite fallback)
+export async function createUser(params: {
   name: string;
   email: string;
   password: string;
@@ -109,16 +114,38 @@ export function createUser(params: {
   const id = crypto.randomUUID();
   const { hash, salt } = hashPassword(params.password);
   const now = new Date().toISOString();
+  const normalizedEmail = params.email.toLowerCase().trim();
 
-  const stmt = db.prepare(`
-    INSERT INTO users (id, name, email, password_hash, salt, role, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  stmt.run(id, params.name, params.email.toLowerCase().trim(), hash, salt, params.role, now);
+  // 1. Try Supabase profiles
+  try {
+    const { error } = await supabase.from("profiles").insert({
+      id,
+      name: params.name,
+      email: normalizedEmail,
+      role: params.role,
+      created_at: now,
+    });
+    if (error && error.code !== "PGRST205") {
+      console.warn("Supabase profile insert notice:", error.message);
+    }
+  } catch (err) {
+    console.warn("Supabase profile insert skipped:", err);
+  }
+
+  // 2. Also save to local SQLite for reliability
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO users (id, name, email, password_hash, salt, role, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, params.name, normalizedEmail, hash, salt, params.role, now);
+  } catch (e) {
+    console.warn("SQLite user save warning:", e);
+  }
 
   // If registering as a player, automatically create a linked player profile
   if (params.role === "player") {
-    createPlayer({
+    await createPlayer({
       firstName: params.name,
       userId: id,
     });
@@ -127,10 +154,39 @@ export function createUser(params: {
   return { id, name: params.name, email: params.email, role: params.role };
 }
 
-export function findUserByEmail(email: string) {
+export async function findUserByEmail(email: string) {
+  const cleanEmail = email.toLowerCase().trim();
+
+  // 1. Try Supabase
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if (!error && data) {
+      // Find password info from local store
+      const db = getDb();
+      const localUser = db.prepare("SELECT password_hash, salt FROM users WHERE email = ?").get(cleanEmail) as { password_hash: string; salt: string } | undefined;
+      return {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        password_hash: localUser?.password_hash || "",
+        salt: localUser?.salt || "",
+        role: data.role as "player" | "caregiver" | "professional",
+        created_at: data.created_at,
+      };
+    }
+  } catch {
+    // Fallback to SQLite
+  }
+
+  // 2. SQLite fallback
   const db = getDb();
   const stmt = db.prepare("SELECT * FROM users WHERE email = ?");
-  const row = stmt.get(email.toLowerCase().trim()) as {
+  const row = stmt.get(cleanEmail) as {
     id: string;
     name: string;
     email: string;
@@ -142,7 +198,27 @@ export function findUserByEmail(email: string) {
   return row;
 }
 
-export function findUserById(id: string) {
+export async function findUserById(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, name, email, role, created_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as {
+        id: string;
+        name: string;
+        email: string;
+        role: "player" | "caregiver" | "professional";
+        created_at: string;
+      };
+    }
+  } catch {
+    // Fallback
+  }
+
   const db = getDb();
   const stmt = db.prepare("SELECT id, name, email, role, created_at FROM users WHERE id = ?");
   return stmt.get(id) as {
@@ -154,30 +230,75 @@ export function findUserById(id: string) {
   } | undefined;
 }
 
-// Player Helpers
-export function createPlayer(params: {
+// Player Helpers (Supabase-first)
+export async function createPlayer(params: {
   firstName: string;
   lastName?: string;
   userId?: string;
 }) {
-  const db = getDb();
   const id = crypto.randomUUID();
-  // 6-digit access code formatted as e.g. 482731
   const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
   const now = new Date().toISOString();
 
-  const stmt = db.prepare(`
-    INSERT INTO players (id, user_id, first_name, last_name, access_code, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  stmt.run(id, params.userId || null, params.firstName, params.lastName || null, accessCode, now);
+  // 1. Save to Supabase
+  try {
+    const { error } = await supabase.from("players").insert({
+      id,
+      user_id: params.userId || null,
+      first_name: params.firstName,
+      last_name: params.lastName || null,
+      access_code: accessCode,
+      created_at: now,
+    });
+    if (error && error.code !== "PGRST205") {
+      console.warn("Supabase createPlayer warning:", error.message);
+    }
+  } catch (err) {
+    console.warn("Supabase createPlayer skipped:", err);
+  }
+
+  // 2. Save to SQLite
+  try {
+    const db = getDb();
+    const stmt = db.prepare(`
+      INSERT INTO players (id, user_id, first_name, last_name, access_code, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, params.userId || null, params.firstName, params.lastName || null, accessCode, now);
+  } catch (err) {
+    console.warn("SQLite createPlayer warning:", err);
+  }
 
   return { id, firstName: params.firstName, lastName: params.lastName, accessCode };
 }
 
-export function findPlayerByAccessCode(code: string) {
-  const db = getDb();
+export async function findPlayerByAccessCode(code: string) {
   const cleanCode = code.replace(/\s+/g, "");
+
+  // 1. Try Supabase
+  try {
+    const { data, error } = await supabase
+      .from("players")
+      .select("*")
+      .eq("access_code", cleanCode)
+      .maybeSingle();
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        user_id: data.user_id,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        access_code: data.access_code,
+        created_at: data.created_at,
+      };
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. SQLite fallback
+  const db = getDb();
   const stmt = db.prepare("SELECT * FROM players WHERE access_code = ?");
   return stmt.get(cleanCode) as {
     id: string;
@@ -189,7 +310,29 @@ export function findPlayerByAccessCode(code: string) {
   } | undefined;
 }
 
-export function findPlayerById(id: string) {
+export async function findPlayerById(id: string) {
+  // 1. Try Supabase
+  try {
+    const { data, error } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        user_id: data.user_id,
+        first_name: data.first_name,
+        last_name: data.last_name,
+        access_code: data.access_code,
+        created_at: data.created_at,
+      };
+    }
+  } catch {
+    // fallback
+  }
+
   const db = getDb();
   const stmt = db.prepare("SELECT * FROM players WHERE id = ?");
   return stmt.get(id) as {
@@ -202,7 +345,41 @@ export function findPlayerById(id: string) {
   } | undefined;
 }
 
-export function getPlayersForCaregiver(caregiverId: string) {
+export async function getPlayersForCaregiver(caregiverId: string) {
+  // 1. Try Supabase
+  try {
+    const { data: connections, error } = await supabase
+      .from("caregiver_connections")
+      .select("player_id, relationship, created_at")
+      .eq("caregiver_id", caregiverId);
+
+    if (!error && connections && connections.length > 0) {
+      const playerIds = connections.map((c) => c.player_id);
+      const { data: playersData } = await supabase
+        .from("players")
+        .select("*")
+        .in("id", playerIds);
+
+      if (playersData) {
+        return playersData.map((p) => {
+          const conn = connections.find((c) => c.player_id === p.id);
+          return {
+            id: p.id,
+            user_id: p.user_id,
+            first_name: p.first_name,
+            last_name: p.last_name,
+            access_code: p.access_code,
+            relationship: conn?.relationship || "Family",
+            connected_at: conn?.created_at || p.created_at,
+          };
+        });
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. SQLite fallback
   const db = getDb();
   const stmt = db.prepare(`
     SELECT p.*, cc.relationship, cc.created_at as connected_at
@@ -222,26 +399,54 @@ export function getPlayersForCaregiver(caregiverId: string) {
   }>;
 }
 
-export function connectPlayerToCaregiver(caregiverId: string, accessCode: string, relationship = "Family") {
-  const player = findPlayerByAccessCode(accessCode);
+export async function connectPlayerToCaregiver(caregiverId: string, accessCode: string, relationship = "Family") {
+  const player = await findPlayerByAccessCode(accessCode);
   if (!player) {
     throw new Error("Invalid access code. Please verify the 6-digit code with the player.");
   }
 
-  const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  const stmt = db.prepare(`
-    INSERT OR REPLACE INTO caregiver_connections (id, caregiver_id, player_id, relationship, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  stmt.run(id, caregiverId, player.id, relationship, now);
+  // 1. Try Supabase
+  try {
+    await supabase.from("caregiver_connections").upsert({
+      id,
+      caregiver_id: caregiverId,
+      player_id: player.id,
+      relationship,
+      created_at: now,
+    });
+  } catch (err) {
+    console.warn("Supabase connectPlayer warning:", err);
+  }
+
+  // 2. SQLite
+  try {
+    const db = getDb();
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO caregiver_connections (id, caregiver_id, player_id, relationship, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    stmt.run(id, caregiverId, player.id, relationship, now);
+  } catch (err) {
+    console.warn("SQLite connectPlayer warning:", err);
+  }
 
   return player;
 }
 
-export function disconnectPlayerFromCaregiver(caregiverId: string, playerId: string) {
+export async function disconnectPlayerFromCaregiver(caregiverId: string, playerId: string) {
+  try {
+    await supabase
+      .from("caregiver_connections")
+      .delete()
+      .eq("caregiver_id", caregiverId)
+      .eq("player_id", playerId);
+  } catch (e) {
+    console.warn("Supabase disconnect warning:", e);
+  }
+
   const db = getDb();
   const stmt = db.prepare(`
     DELETE FROM caregiver_connections WHERE caregiver_id = ? AND player_id = ?
@@ -249,7 +454,7 @@ export function disconnectPlayerFromCaregiver(caregiverId: string, playerId: str
   stmt.run(caregiverId, playerId);
 }
 
-// Session Tracking
+// Session Tracking (Supabase-first)
 export interface GameSessionInput {
   playerId: string;
   gameType: "MEMORY_MATCH" | "PICTURE_RECALL" | "SEQUENCE";
@@ -263,8 +468,7 @@ export interface GameSessionInput {
   status?: "COMPLETED" | "SKIPPED" | "EXITED_EARLY";
 }
 
-export function recordGameSession(input: GameSessionInput) {
-  const db = getDb();
+export async function recordGameSession(input: GameSessionInput) {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
@@ -275,28 +479,56 @@ export function recordGameSession(input: GameSessionInput) {
   const errors = input.errors ?? 0;
   const status = input.status ?? "COMPLETED";
 
-  const stmt = db.prepare(`
-    INSERT INTO game_sessions (
-      id, player_id, game_type, difficulty, duration_seconds,
-      score, accuracy, attempts, hints_used, errors, status, created_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // 1. Save to Supabase
+  try {
+    const { error } = await supabase.from("game_sessions").insert({
+      id,
+      player_id: input.playerId,
+      game_type: input.gameType,
+      difficulty: input.difficulty,
+      duration_seconds: input.durationSeconds,
+      score: calculatedScore,
+      accuracy,
+      attempts,
+      hints_used: hintsUsed,
+      errors,
+      status,
+      created_at: now,
+    });
+    if (error && error.code !== "PGRST205") {
+      console.warn("Supabase recordGameSession notice:", error.message);
+    }
+  } catch (err) {
+    console.warn("Supabase recordGameSession skipped:", err);
+  }
 
-  stmt.run(
-    id,
-    input.playerId,
-    input.gameType,
-    input.difficulty,
-    input.durationSeconds,
-    calculatedScore,
-    accuracy,
-    attempts,
-    hintsUsed,
-    errors,
-    status,
-    now
-  );
+  // 2. Save to SQLite
+  try {
+    const db = getDb();
+    const stmt = db.prepare(`
+      INSERT INTO game_sessions (
+        id, player_id, game_type, difficulty, duration_seconds,
+        score, accuracy, attempts, hints_used, errors, status, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      id,
+      input.playerId,
+      input.gameType,
+      input.difficulty,
+      input.durationSeconds,
+      calculatedScore,
+      accuracy,
+      attempts,
+      hintsUsed,
+      errors,
+      status,
+      now
+    );
+  } catch (err) {
+    console.warn("SQLite recordGameSession warning:", err);
+  }
 
   return { id, ...input, score: calculatedScore, createdAt: now };
 }
@@ -316,7 +548,29 @@ export interface SessionRow {
   created_at: string;
 }
 
-export function getPlayerSessions(playerId: string, gameType?: string, limit = 50): SessionRow[] {
+export async function getPlayerSessions(playerId: string, gameType?: string, limit = 50): Promise<SessionRow[]> {
+  // 1. Try Supabase
+  try {
+    let query = supabase
+      .from("game_sessions")
+      .select("*")
+      .eq("player_id", playerId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (gameType) {
+      query = query.eq("game_type", gameType);
+    }
+
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      return data as SessionRow[];
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. SQLite fallback
   const db = getDb();
   if (gameType) {
     const stmt = db.prepare(`
@@ -338,9 +592,8 @@ export function getPlayerSessions(playerId: string, gameType?: string, limit = 5
 }
 
 // Detailed Player Analytics (Baseline after 5 valid sessions)
-export function getPlayerAnalytics(playerId: string) {
-  const db = getDb();
-  const allSessions: SessionRow[] = getPlayerSessions(playerId, undefined, 100);
+export async function getPlayerAnalytics(playerId: string) {
+  const allSessions: SessionRow[] = await getPlayerSessions(playerId, undefined, 100);
 
   const completed = allSessions.filter((s) => s.status === "COMPLETED");
   const totalCompleted = completed.length;
@@ -355,7 +608,7 @@ export function getPlayerAnalytics(playerId: string) {
     const typeSessions = completed.filter((s) => s.game_type === type);
     const count = typeSessions.length;
 
-    // Baseline: first 5 completed sessions
+    // Baseline: first 5 completed sessions (chronologically earliest)
     const baselineSessions = typeSessions.slice(-5);
     const hasBaseline = baselineSessions.length >= 5;
 

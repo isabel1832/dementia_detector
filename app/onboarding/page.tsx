@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [settings, setSettings] = useState({
     textSize: "standard",
@@ -383,12 +385,32 @@ export default function OnboardingPage() {
                   Back
                 </button>
 
-                <Link
-                  href="/player"
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem(
+                        "dementia_app_accessibility",
+                        JSON.stringify({
+                          textSize: settings.textSize,
+                          contrast: settings.contrast,
+                          soundEffects: settings.soundEffects,
+                          music: settings.music,
+                          voiceInstructions: settings.voiceInstructions,
+                          repeatInstructions: settings.repeatInstructions,
+                          voiceSpeed: "normal",
+                          reducedMotion: settings.animation === "reduced",
+                        })
+                      );
+                    } catch {
+                      // ignore
+                    }
+                    router.push("/player");
+                  }}
                   className="flex min-h-16 items-center justify-center rounded-2xl bg-[#315C43] px-10 text-lg font-bold text-white transition hover:bg-[#274C36] focus:outline-none focus:ring-4 focus:ring-[#B8CEBD]"
                 >
                   Start using the app
-                </Link>
+                </button>
               </div>
             </div>
           </section>

@@ -27,7 +27,9 @@ export default function CaregiverPlayersPage() {
 
   async function loadPlayers() {
     try {
-      const res = await fetch("/api/caregiver/players");
+      const activeCaregiverId = localStorage.getItem("active_caregiver_id");
+      const url = activeCaregiverId ? `/api/caregiver/players?caregiverId=${activeCaregiverId}` : "/api/caregiver/players";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setPlayers(data.players || []);
@@ -47,10 +49,12 @@ export default function CaregiverPlayersPage() {
     setIsLoading(true);
 
     try {
+      const activeCaregiverId = localStorage.getItem("active_caregiver_id") || undefined;
       const res = await fetch("/api/caregiver/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          caregiverId: activeCaregiverId,
           accessCode: accessCodeInput,
           relationship: relationshipInput,
         }),
@@ -78,11 +82,13 @@ export default function CaregiverPlayersPage() {
     setIsLoading(true);
 
     try {
+      const activeCaregiverId = localStorage.getItem("active_caregiver_id") || undefined;
       const res = await fetch("/api/caregiver/players", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create",
+          caregiverId: activeCaregiverId,
           firstName: newFirstName,
           lastName: newLastName,
           relationship: newRelationship,

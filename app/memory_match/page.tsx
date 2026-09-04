@@ -135,6 +135,24 @@ export default function MemoryMatchPage() {
           createdAt: new Date().toISOString(),
         });
         localStorage.setItem("dementia_sessions", JSON.stringify(history));
+
+        // Persist to backend / Supabase
+        const activePlayerId = localStorage.getItem("active_player_id") || undefined;
+        fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId: activePlayerId,
+            gameType: "MEMORY_MATCH",
+            difficulty,
+            durationSeconds: seconds,
+            attempts,
+            hintsUsed,
+            score: Math.max(0, 100 - attempts * 2 - hintsUsed * 5),
+            accuracy: Math.round((totalPairs / Math.max(totalPairs, attempts)) * 100),
+            status: "COMPLETED",
+          }),
+        }).catch((err) => console.warn("Session save warning:", err));
       } catch {
         // ignore
       }

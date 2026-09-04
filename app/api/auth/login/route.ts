@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { findUserByEmail, verifyPassword, findPlayerByAccessCode } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
@@ -7,7 +8,7 @@ export async function POST(req: Request) {
 
     // 1. Access Code Login (Player)
     if (body.accessCode) {
-      const player = findPlayerByAccessCode(body.accessCode);
+      const player = await findPlayerByAccessCode(body.accessCode);
       if (!player) {
         return NextResponse.json(
           { error: "Access code not found. Please check your 6-digit code." },
@@ -35,7 +36,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = findUserByEmail(email);
+    // Try Supabase Auth first
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (!authError && authData?.user) {
+        const userProfile = await findUserByEmail(email);
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: authData.user.id,
+            name: userProfile?.name || authData.user.user_metadata?.name || email.split("@")[0],
+            email: authData.user.email,
+            role: userProfile?.role || authData.user.user_metadata?.role || "caregiver",
+          },
+          session: authData.session,
+        });
+      }
+    } catch {
+      // Fallback to local DB verification
+    }
+
+    const user = await findUserByEmail(email);
     if (!user) {
       return NextResponse.json(
         { error: "Invalid email or password." },

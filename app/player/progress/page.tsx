@@ -25,7 +25,9 @@ export default function PlayerProgressPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const res = await fetch("/api/sessions");
+        const activePlayerId = localStorage.getItem("active_player_id");
+        const url = activePlayerId ? `/api/sessions?playerId=${activePlayerId}` : "/api/sessions";
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.analytics) {

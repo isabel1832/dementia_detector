@@ -155,6 +155,7 @@ export default function SequencePage() {
       speak("Great job! You reproduced the complete sequence.");
 
       try {
+        const accuracy = Math.round((sequence.length / (sequence.length + attempts)) * 100);
         const history = JSON.parse(localStorage.getItem("dementia_sessions") || "[]");
         history.push({
           id: Date.now().toString(),
@@ -166,6 +167,23 @@ export default function SequencePage() {
           createdAt: new Date().toISOString(),
         });
         localStorage.setItem("dementia_sessions", JSON.stringify(history));
+
+        // Persist to backend / Supabase
+        const activePlayerId = localStorage.getItem("active_player_id") || undefined;
+        fetch("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId: activePlayerId,
+            gameType: "SEQUENCE",
+            difficulty,
+            durationSeconds: seconds,
+            score: Math.max(0, 100 - attempts * 5),
+            accuracy,
+            attempts: attempts + 1,
+            status: "COMPLETED",
+          }),
+        }).catch((err) => console.warn("Session save warning:", err));
       } catch {
         // ignore
       }

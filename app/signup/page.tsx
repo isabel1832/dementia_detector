@@ -36,6 +36,19 @@ export default function SignupPage() {
         return;
       }
 
+      // Persist auth state in browser
+      try {
+        localStorage.setItem("dementia_auth_user", JSON.stringify(data.user));
+        if (data.user.role === "caregiver") {
+          localStorage.setItem("active_caregiver_id", data.user.id);
+        } else {
+          localStorage.setItem("active_player_id", data.user.id);
+          localStorage.setItem("active_player_name", data.user.name || "");
+        }
+      } catch {
+        // ignore
+      }
+
       if (accountType === "caregiver") {
         router.push("/caregiver/dashboard");
       } else {

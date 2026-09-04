@@ -1,22 +1,32 @@
 import { NextResponse } from "next/server";
 import { getPlayersForCaregiver, connectPlayerToCaregiver, createPlayer, getDb } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     let caregiverId: string | undefined = searchParams.get("caregiverId") ?? undefined;
 
-    const db = getDb();
     if (!caregiverId) {
-      const caregiver = db.prepare("SELECT id FROM users WHERE role = 'caregiver' LIMIT 1").get() as { id: string } | undefined;
-      caregiverId = caregiver?.id;
+      try {
+        const { data } = await supabase.from("profiles").select("id").eq("role", "caregiver").limit(1).maybeSingle();
+        if (data?.id) caregiverId = data.id;
+      } catch {
+        // ignore
+      }
+
+      if (!caregiverId) {
+        const db = getDb();
+        const caregiver = db.prepare("SELECT id FROM users WHERE role = 'caregiver' LIMIT 1").get() as { id: string } | undefined;
+        caregiverId = caregiver?.id;
+      }
     }
 
     if (!caregiverId) {
       return NextResponse.json({ players: [] });
     }
 
-    const players = getPlayersForCaregiver(caregiverId);
+    const players = await getPlayersForCaregiver(caregiverId);
     return NextResponse.json({ success: true, players });
   } catch (error: unknown) {
     console.error("Get caregiver players error:", error);
@@ -29,11 +39,20 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, caregiverId, accessCode, firstName, lastName, relationship } = body;
 
-    const db = getDb();
     let effectiveCaregiverId = caregiverId;
     if (!effectiveCaregiverId) {
-      const caregiver = db.prepare("SELECT id FROM users WHERE role = 'caregiver' LIMIT 1").get() as { id: string } | undefined;
-      effectiveCaregiverId = caregiver?.id;
+      try {
+        const { data } = await supabase.from("profiles").select("id").eq("role", "caregiver").limit(1).maybeSingle();
+        if (data?.id) effectiveCaregiverId = data.id;
+      } catch {
+        // ignore
+      }
+
+      if (!effectiveCaregiverId) {
+        const db = getDb();
+        const caregiver = db.prepare("SELECT id FROM users WHERE role = 'caregiver' LIMIT 1").get() as { id: string } | undefined;
+        effectiveCaregiverId = caregiver?.id;
+      }
     }
 
     if (!effectiveCaregiverId) {
@@ -44,8 +63,8 @@ export async function POST(req: Request) {
       if (!firstName) {
         return NextResponse.json({ error: "First name is required." }, { status: 400 });
       }
-      const newPlayer = createPlayer({ firstName, lastName });
-      connectPlayerToCaregiver(effectiveCaregiverId, newPlayer.accessCode, relationship || "Family");
+      const newPlayer = await createPlayer({ firstName, lastName });
+      await connectPlayerToCaregiver(effectiveCaregiverId, newPlayer.accessCode, relationship || "Family");
       return NextResponse.json({ success: true, player: newPlayer });
     }
 
@@ -54,7 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Access code is required." }, { status: 400 });
     }
 
-    const connected = connectPlayerToCaregiver(effectiveCaregiverId, accessCode, relationship || "Family");
+    const connected = await connectPlayerToCaregiver(effectiveCaregiverId, accessCode, relationship || "Family");
     return NextResponse.json({ success: true, player: connected });
   } catch (error: unknown) {
     console.error("Caregiver player action error:", error);
